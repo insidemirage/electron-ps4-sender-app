@@ -1,11 +1,18 @@
 import { contextBridge, ipcRenderer, IpcRendererEvent } from 'electron';
 
-export type Channels = 'notify' | 'addTasks' | 'updateTask';
+export type Channels =
+  | 'notify'
+  | 'addTasks'
+  | 'updateTask'
+  | 'syncTasks'
+  | 'removeTask';
 export type ServerChannels =
   | 'addPackages'
   | 'installPackage'
   | 'stopTask'
-  | 'getTaskInfo';
+  | 'getTaskInfo'
+  | 'syncTasks'
+  | 'removeTask';
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {

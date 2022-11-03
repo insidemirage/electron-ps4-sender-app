@@ -7,4 +7,7 @@ export interface TaskData {
   transferredTotal?: number;
   restSec?: number;
   error?: number;
+  taskId?: number;
+  titleId?: string;
+  contentId?: string;
 }

@@ -34,14 +34,12 @@ const MainScreen = () => {
   };
 
   const updateTaskHandler = (data: TaskData) => {
-    console.log('-> update', data);
-    const { id } = data;
-    if (id) {
+    const { name } = data;
+    if (name) {
       const currentTasks = tasksRef.current || [];
-      const taskIndex = currentTasks.findIndex((v) => v.id === id);
+      const taskIndex = currentTasks.findIndex((v) => v.name === name);
       currentTasks[taskIndex] = data;
       if (taskIndex !== -1) {
-        console.log('setTasks', currentTasks);
         setTasks((v) => [...currentTasks]);
       }
     }
@@ -54,7 +52,6 @@ const MainScreen = () => {
     const taskNames = tasks.map((v) => v.name);
     for (const { name, path } of files) {
       if (taskNames.indexOf(name) !== -1) {
-        console.log('nofigy ');
         notify(
           'error',
           'Task exists.',
@@ -72,6 +69,10 @@ const MainScreen = () => {
 
   // TODO: replace name with id
   const removeTask = (taskName: string) => {
+    window.electron.ipcRenderer.sendMessage('removeTask', taskName);
+  };
+
+  const removeTaskHandler = (taskName: string) => {
     setTasks((v) => v.filter((v) => v.name !== taskName));
   };
 
@@ -120,6 +121,20 @@ const MainScreen = () => {
     uploaderInputRef.current?.click();
   };
 
+  const syncTasks = (data: TaskData[]) => {
+    const storageTasks = localStorage.getItem('tasks');
+    setTasks((v) => [...v, ...data]);
+    if (storageTasks) {
+      const parsedTasks = JSON.parse(storageTasks);
+      if (Array.isArray(JSON.parse(storageTasks))) {
+        window.electron.ipcRenderer.sendMessage(
+          'addPackages',
+          parsedTasks.map((v) => ({ ...v, noNotify: true }))
+        );
+      }
+    }
+  };
+
   useEffect(() => {
     tasksRef.current = tasks;
     if (didMountRef.current) {
@@ -134,15 +149,22 @@ const MainScreen = () => {
   useEffect(() => {
     const storageTasks = localStorage.getItem('tasks');
     if (storageTasks) {
-      setTasks(JSON.parse(storageTasks));
+      window.electron.ipcRenderer.sendMessage('syncTasks', []);
     }
     window.electron.ipcRenderer.on('addTasks', addTasksHandler);
     window.electron.ipcRenderer.on('updateTask', updateTaskHandler);
+    window.electron.ipcRenderer.on('syncTasks', syncTasks);
+    window.electron.ipcRenderer.on('removeTask', removeTaskHandler);
     return () => {
       window.electron.ipcRenderer.removeListener('addTasks', addTasksHandler);
       window.electron.ipcRenderer.removeListener(
         'updateTask',
         updateTaskHandler
+      );
+      window.electron.ipcRenderer.removeListener('syncTasks', syncTasks);
+      window.electron.ipcRenderer.removeListener(
+        'removeTask',
+        removeTaskHandler
       );
     };
   }, []);

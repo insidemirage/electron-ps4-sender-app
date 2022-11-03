@@ -84,19 +84,16 @@ const ControlsSwitch = ({ data }: { data: TaskData }) => {
 const Task = ({ taskData }: { taskData: TaskData }) => {
   const { name, path, status } = taskData;
   const taskDataRef = useRef(taskData);
+  const taskIntervalRef = useRef<any>(null);
   const [progress, setCurrentProgress] = useState(0);
 
   const calculateState = () => {
-    setTimeout(() => {
-      if (taskDataRef.current.status !== 'pause') {
-        console.log('sentipc');
-        window.electron.ipcRenderer.sendMessage(
-          'getTaskInfo',
-          taskDataRef.current
-        );
-      }
-      calculateState();
-    }, 2000);
+    if (taskDataRef.current) {
+      window.electron.ipcRenderer.sendMessage(
+        'getTaskInfo',
+        taskDataRef.current
+      );
+    }
   };
 
   const getProgressBarStatus = () => {
@@ -125,7 +122,12 @@ const Task = ({ taskData }: { taskData: TaskData }) => {
 
   useEffect(() => {
     window.electron.ipcRenderer.sendMessage('getTaskInfo', taskDataRef.current);
-    calculateState();
+    taskIntervalRef.current = setInterval(calculateState, 200);
+    return () => {
+      if (taskIntervalRef.current !== null) {
+        clearInterval(taskIntervalRef.current);
+      }
+    };
   }, []);
 
   return (
