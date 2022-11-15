@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { MemoryRouter as Router, Routes, Route } from 'react-router-dom';
 import { DownloadOutlined } from '@ant-design/icons';
-import { Layout, Button } from 'antd';
+import { Layout, Button, InputNumber, Input, Tooltip, InputRef } from 'antd';
 import AppSenderPage from './AppSenderPage';
 import 'antd/dist/antd.css';
 import './App.css';
@@ -22,8 +22,12 @@ export const MainScreenContext = React.createContext<MainContextObject>({});
 
 const MainScreen = () => {
   const uploaderInputRef = useRef<HTMLInputElement>(null);
+  const portRef = useRef<HTMLInputElement>(null);
+  const ipRef = useRef<InputRef>(null);
 
   const [tasks, setTasks] = useState<TaskData[]>([]);
+  const [psIp, setPsIp] = useState<string | null>(null);
+  const [serverPort, setServerPort] = useState<number | null>(null);
   const tasksRef = useRef<TaskData[]>([]);
   const didMountRef = useRef<boolean>(false);
 
@@ -135,6 +139,25 @@ const MainScreen = () => {
     }
   };
 
+  const updatePortAndIp = () => {
+    const ip = ipRef.current;
+    if (!portRef.current || !ip) return;
+    if (!ip?.input?.value) return;
+    window.electron.ipcRenderer.sendMessage('syncSettings', {
+      ip: ip?.input?.value,
+      port: portRef.current.value,
+    });
+    localStorage.setItem(
+      'settings',
+      JSON.stringify({ ip: ip?.input?.value, port: portRef.current.value })
+    );
+  };
+
+  const setIpAndPort = (ip: string, port: number) => {
+    setPsIp(ip);
+    setServerPort(port);
+  };
+
   useEffect(() => {
     tasksRef.current = tasks;
     if (didMountRef.current) {
@@ -155,6 +178,21 @@ const MainScreen = () => {
     window.electron.ipcRenderer.on('updateTask', updateTaskHandler);
     window.electron.ipcRenderer.on('syncTasks', syncTasks);
     window.electron.ipcRenderer.on('removeTask', removeTaskHandler);
+
+    try {
+      const settings = localStorage.getItem('settings');
+      if (settings) {
+        const payload = JSON.parse(settings);
+        const { ip, port } = payload;
+        setIpAndPort(ip, port);
+        window.electron.ipcRenderer.sendMessage('syncSettings', payload);
+      } else {
+        setIpAndPort('192.168.31.11', 8731);
+      }
+    } catch (e) {
+      setIpAndPort('192.168.31.11', 8731);
+      console.log(e);
+    }
     return () => {
       window.electron.ipcRenderer.removeListener('addTasks', addTasksHandler);
       window.electron.ipcRenderer.removeListener(
@@ -183,10 +221,38 @@ const MainScreen = () => {
             height: 40,
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-end',
+            justifyContent: 'space-between',
             padding: '0 10px',
           }}
         >
+          <div
+            style={{
+              display: 'flex',
+              columnGap: 5,
+            }}
+          >
+            <Tooltip placement="bottom" title="Api port">
+              <InputNumber
+                min={0}
+                max={49152}
+                value={serverPort}
+                placeholder="Api port"
+                style={{ minWidth: 100 }}
+                ref={portRef}
+                onChange={(val) => setServerPort(val)}
+              />
+            </Tooltip>
+
+            <Tooltip placement="bottom" title="ps4 Ip">
+              <Input
+                placeholder="ps4 Ip"
+                value={psIp}
+                ref={ipRef}
+                onChange={(e) => setPsIp(e.target.value)}
+              />
+            </Tooltip>
+            <Button onClick={updatePortAndIp}>Update</Button>
+          </div>
           <input
             type="file"
             id="myFileInput"

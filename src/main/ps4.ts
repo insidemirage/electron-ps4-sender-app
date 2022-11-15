@@ -1,7 +1,6 @@
 import fetch from 'electron-fetch';
 import { TaskData } from '../renderer/types/task';
 
-export const PLAYSTATION_IP = '192.168.31.170';
 const hexRegexp = /0[xX][0-9a-fA-F]+/gm;
 
 enum Ps4Urls {
@@ -21,9 +20,17 @@ interface CallStack {
 }
 
 export default class PS4 {
-  baseUrl = `http://${PLAYSTATION_IP}:12800/api`;
+  playStationIp = '192.168.31.11';
+
+  baseUrl = `:12800/api`;
+
+  serverPort = 8731;
 
   callStack: CallStack = {};
+
+  setPlayStationIp = (ip: string) => {
+    this.playStationIp = ip;
+  };
 
   jsonParser(data: string) {
     let result = data;
@@ -51,11 +58,14 @@ export default class PS4 {
       `send response ${link} requestData ${JSON.stringify(requestData)}`
     );
     try {
-      const response = await fetch(`${this.baseUrl}${link}`, {
-        method: 'post',
-        body: JSON.stringify(requestData),
-        timeout: 2000,
-      });
+      const response = await fetch(
+        `http://${this.playStationIp}${this.baseUrl}${link}`,
+        {
+          method: 'post',
+          body: JSON.stringify(requestData),
+          timeout: 2000,
+        }
+      );
       const data = await response.text();
       return this.jsonParser(data);
     } catch (e) {

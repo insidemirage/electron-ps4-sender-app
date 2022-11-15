@@ -6,13 +6,15 @@ export type Channels =
   | 'updateTask'
   | 'syncTasks'
   | 'removeTask';
+
 export type ServerChannels =
   | 'addPackages'
   | 'installPackage'
   | 'stopTask'
   | 'getTaskInfo'
   | 'syncTasks'
-  | 'removeTask';
+  | 'removeTask'
+  | 'syncSettings';
 
 contextBridge.exposeInMainWorld('electron', {
   ipcRenderer: {

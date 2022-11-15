@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron';
+import ipService from 'ip';
 import { v4 as uuidv4 } from 'uuid';
 import express from 'express';
 import cors from 'cors';
@@ -7,6 +8,7 @@ import PS4 from './ps4';
 import TasksHolder from './TasksHolder';
 import { addPackagesSchema, packageSchema } from './schemas';
 import { TaskData } from '../renderer/types/task';
+import { Server } from 'http';
 
 interface ApiTickets {
   [key: string]: { retry?: number };
@@ -25,6 +27,8 @@ let ASKING_TASK_INFO = false;
 
 const app = express();
 
+let server: Server | null = null;
+
 app.use(cors());
 
 const sharedPackagesMap: Record<string, string> = {};
@@ -38,8 +42,19 @@ const apiPath = 'http://192.168.31.116:8731/';
 const isPlayStation = (str: string | undefined) =>
   str ? !!str.match(/PlayStation 4/) : false;
 
+const createExpressServer = (port = 8731) => {
+  server = app.listen(port, () => {
+    console.log(`express has started on ${ipService.address()}:${port}`);
+  });
+};
+
+app.get('/alive', (req, res) => {
+  res.json({ alive: true, psServiceEnabled: !!ps4 });
+});
+
 app.get('/package/:name', express.json({ type: '*/*' }), async (req, res) => {
   const task = tasksHolder.getTask('name', req.params.name);
+  const { lengthTotal } = task;
   const packagePath = task ? task.path : null;
   const { range } = req.headers;
   if (
@@ -47,7 +62,8 @@ app.get('/package/:name', express.json({ type: '*/*' }), async (req, res) => {
     req.headers['user-agent'] &&
     isPlayStation(req.headers['user-agent']) &&
     task &&
-    task.askedApi
+    task.askedApi &&
+    lengthTotal
   ) {
     if (!req.headers.range) return;
     const transferred = range.replace('bytes=', '').split('-');
@@ -58,7 +74,8 @@ app.get('/package/:name', express.json({ type: '*/*' }), async (req, res) => {
     const removeTime = Date.now() + 1000 * 40;
     tasksHolder.updateTask(
       {
-        status: transferredTotal === task.lengthTotal ? 'success' : 'loading',
+        // Equals but -8 bit because of taskcalc errors
+        status: transferredTotal >= lengthTotal - 8 ? 'success' : 'loading',
         transferredTotal,
         removeTime,
       },
@@ -73,6 +90,24 @@ app.get('/package/:name', express.json({ type: '*/*' }), async (req, res) => {
       status: 'fail',
       message: 'Content not found in content map.',
     });
+  }
+});
+
+interface SyncSettingsPayload {
+  ip: string;
+  port: number;
+}
+
+ipcMain.on('syncSettings', (event, payload: SyncSettingsPayload) => {
+  if (server) {
+    server.close();
+  }
+  if (ps4) {
+    const { ip, port } = payload;
+    console.log('ps IP: ', ip);
+    ps4.setPlayStationIp(ip);
+    ps4.serverPort = port;
+    createExpressServer(port);
   }
 });
 
@@ -170,14 +205,16 @@ ipcMain.on('getTaskInfo', async (event, data: TaskData) => {
 });
 
 ipcMain.on('stopTask', async (event, data: TaskData) => {
-  if (!data.taskId) {
+  const { taskId } = data;
+  if (typeof taskId !== 'number') {
     event.reply('notify', {
       type: 'error',
       message: `Error`,
       description: `taskId not found`,
     });
+    return;
   }
-  const result = await ps4.stopTask(data);
+  const result = await ps4.stopTask(taskId);
   if (result.status === 'fail') {
     event.reply('notify', {
       type: 'error',
@@ -210,7 +247,10 @@ ipcMain.on('installPackage', async (event, data: TaskData) => {
   if (!sharedPackagesMap[data.name]) {
     sharedPackagesMap[data.name] = data.path;
   }
-  const result = await ps4.install([`${apiPath}package/${data.name}`], data);
+  const result = await ps4.install(
+    [`http://${ipService.address()}:${ps4.serverPort}/package/${data.name}`],
+    data
+  );
   if (result.status === 'fail') {
     return event.reply('notify', {
       type: 'error',
@@ -233,8 +273,4 @@ ipcMain.on('installPackage', async (event, data: TaskData) => {
 
 ipcMain.on('syncTasks', (event, data) => {
   event.reply('syncTasks', tasksHolder.tasksData);
-});
-
-app.listen(8731, () => {
-  console.log('express has started on port 3000');
 });
